@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify"
-import { z } from "zod"
+import { string, z } from "zod"
 import dayjs from "dayjs"
 import { prisma } from "./lib/prisma"
 
@@ -15,7 +15,7 @@ export async function appRoutes(app: FastifyInstance) {
     const { title, weekDays } = createHabitBody.parse(req.body)
 
     const today = dayjs().startOf('day').toDate()
-    console.log(today)
+    
     const habit = await prisma.habit.create({
       data: {
         title,
@@ -39,7 +39,6 @@ export async function appRoutes(app: FastifyInstance) {
     // todos hábitos possíveis
     const parsedDate = dayjs(date).startOf('day')
     const dayWeek = parsedDate.get('day')
-    console.log(date, dayWeek)
 
     const possibleHabits = await prisma.habit.findMany({
       where: {
@@ -70,6 +69,57 @@ export async function appRoutes(app: FastifyInstance) {
     return {
       possibleHabits,
       completedHabits
+    }
+  })
+
+
+  // Completar / não completar um hábito
+  app.patch("/habits/:habitId/toggle", async (req) => {
+    const toggleHabitParams = z.object({
+      habitId: z.string().uuid()
+    })
+
+    const { habitId } = toggleHabitParams.parse(req.params)
+
+    const today = dayjs().startOf('day').toDate()
+
+    let day = await prisma.day.findUnique({
+      where: {
+        date: today
+      }
+    })
+
+    if (!day) {
+      day = await prisma.day.create({
+        data: {
+          date: today
+        }
+      })
+    }
+
+    // Completar o hábito no dia
+    const dayHabit = await prisma.dayHabit.findUnique({
+      where: {
+        day_id_habit_id: {
+          day_id: day.id,
+          habit_id: habitId
+        }
+      }
+    })
+
+    if (dayHabit) {
+      await prisma.dayHabit.delete({
+        where: {
+          id: dayHabit.id
+        }
+      })
+    } else {
+      await prisma.dayHabit.create({
+        data: {
+          day_id: day.id,
+          habit_id: habitId
+        }
+      })
     }
   })
 }
